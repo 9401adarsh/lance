@@ -1198,10 +1198,27 @@ impl<S: IvfSubIndex + 'static, Q: Quantization> IVFIndex<S, Q> {
 
         let cache_key = IVFPartitionKey::<S, Q>::new(partition_id);
 
+        let lance_cache_trace_enabled = std::env::var_os("LANCE_CACHE_TRACE").is_some();
+
+        if lance_cache_trace_enabled {
+            eprintln!(
+                "lance-cache (index) : ivf-partition lookup partition={}.", 
+                partition_id 
+            );
+        }
+
         if write_cache {
             let entry = self
                 .index_cache
                 .get_or_insert_with_key(cache_key, || async {
+
+                    if lance_cache_trace_enabled {
+                        eprintln!(
+                            "lance-cache (index) : ivf-partition miss partition={}. cache miss recorded", 
+                            partition_id 
+                        );
+                    }
+
                     info!(target: TRACE_IO_EVENTS, r#type=IO_TYPE_LOAD_VECTOR_PART, index_type="ivf", part_id=partition_id);
                     metrics.record_part_load();
                     self.load_partition_entry(partition_id, metrics.io_stats())

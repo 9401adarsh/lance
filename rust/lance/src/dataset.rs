@@ -797,9 +797,19 @@ impl Dataset {
             version: manifest_location.version,
             e_tag: manifest_location.e_tag.as_deref(),
         };
-        if let Some(cached) = metadata_cache.get_with_key(&manifest_key).await {
-            return Ok(cached);
+        
+        let cached_manifest = metadata_cache.get_with_key(&manifest_key).await;
+        if std::env::var_os("LANCE_CACHE_TRACE").is_some() {
+            eprintln!(
+                "lance-cache (metadata): get-manifest version={} cache={}",
+                manifest_location.version,
+                if cached_manifest.is_some() { "hit" } else { "miss" }
+            );
         }
+        if let Some(cached_manifest) = cached_manifest {
+            return Ok(cached_manifest);
+        }
+
         let loaded =
             Arc::new(Self::load_manifest(object_store, manifest_location, uri, session).await?);
         metadata_cache
@@ -1171,6 +1181,15 @@ impl Dataset {
             e_tag: location.e_tag.as_deref(),
         };
         let cached_manifest = self.metadata_cache.get_with_key(&manifest_key).await;
+        
+        if std::env::var_os("LANCE_CACHE_TRACE").is_some() {
+            eprintln!(
+                "lance-cache (metadata): latest-manifest version={} cache={}",
+                location.version,
+                if cached_manifest.is_some() { "hit" } else { "miss" }
+            );
+        }
+
         if let Some(cached_manifest) = cached_manifest {
             return Ok((cached_manifest, location));
         }

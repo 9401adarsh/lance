@@ -374,7 +374,8 @@ impl LanceCache {
         F: FnOnce() -> Fut + Send,
         Fut: Future<Output = Result<K::ValueType>> + Send,
     {
-        let key = build_key(&self.prefix, &cache_key.key(), K::type_name());
+        let key_text = cache_key.key().into_owned();
+        let key = build_key(&self.prefix, &key_text, K::type_name());
 
         let typed_loader = Box::pin(async move {
             let value = loader().await?;
@@ -387,6 +388,15 @@ impl LanceCache {
             .cache
             .get_or_insert(&key, typed_loader, K::codec())
             .await?;
+        
+        if std::env::var_os("LANCE_CACHE_TRACE").is_some() {
+            eprintln!(
+                "lance-cache: get-or-insert type={} key={} cache={}",
+                K::type_name(),
+                key_text,
+                if was_cached { "hit" } else { "miss" }
+            );
+        }
 
         if was_cached {
             self.hits.fetch_add(1, Ordering::Relaxed);
@@ -505,7 +515,8 @@ impl WeakLanceCache {
         Fut: Future<Output = Result<K::ValueType>> + Send,
     {
         if let Some(cache) = self.inner.upgrade() {
-            let key = build_key(&self.prefix, &cache_key.key(), K::type_name());
+            let key_text = cache_key.key().into_owned();
+            let key = build_key(&self.prefix, &key_text, K::type_name());
             let typed_loader = Box::pin(async move {
                 let value = loader().await?;
                 let arc = Arc::new(value);
@@ -513,6 +524,16 @@ impl WeakLanceCache {
                 Ok((arc as CacheEntry, size))
             });
             let (entry, was_cached) = cache.get_or_insert(&key, typed_loader, K::codec()).await?;
+            
+            if std::env::var_os("LANCE_CACHE_TRACE").is_some() {
+                eprintln!(
+                    "lance-cache: get-or-insert type={} key={} cache={}",
+                    K::type_name(),
+                    key_text,
+                    if was_cached { "hit" } else { "miss" }
+                );
+            }
+
             if was_cached {
                 self.hits.fetch_add(1, Ordering::Relaxed);
             } else {
